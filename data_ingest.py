@@ -59,6 +59,22 @@ def _standardize_columns(df: pd.DataFrame) -> pd.DataFrame:
     available_cols = [c for c in keep_cols if c in df.columns]
     return df[available_cols]
 
+def _load_local_csv(raw_dir: Path, league: str, season: str) -> Optional[pd.DataFrame]:
+    """Load CSV from local raw directory (works for both downloaded and API-generated CSVs)"""
+    csv_path = raw_dir / f"{league}_{season}.csv"
+
+    if not csv_path.exists():
+        return None
+
+    try:
+        df = pd.read_csv(csv_path, encoding='latin1')
+        df["Season"] = season
+        df["League"] = league
+        return df
+    except Exception as e:
+        print(f"  [WARN] Error reading {csv_path}: {e}")
+        return None
+
 def build_historical_results(seasons: List[str] = SEASONS, leagues: List[str] = LEAGUE_CODES, force: bool = False) -> Path:
     out_path = HISTORICAL_PARQUET
     if out_path.exists() and not force:
@@ -66,11 +82,31 @@ def build_historical_results(seasons: List[str] = SEASONS, leagues: List[str] = 
         return out_path
 
     frames = []
+
+    # Check for API-generated CSVs first (in data/raw_api)
+    api_raw_dir = DATA_DIR / "raw_api"
+    use_api_csvs = api_raw_dir.exists() and any(api_raw_dir.glob("*.csv"))
+
+    if use_api_csvs:
+        print("📡 Found API-generated CSVs, using those...")
+        raw_dir = api_raw_dir
+    else:
+        print("📂 Using standard CSV files...")
+        raw_dir = RAW_DIR
+
     for s in seasons:
         for lg in leagues:
             try:
-                print(f"Fetching {lg} {s} ...")
-                df = _download_historic_csv(s, lg)
+                # First, try to load from local CSVs (API or downloaded)
+                df = _load_local_csv(raw_dir, lg, s)
+
+                # If not found locally, download from web
+                if df is None:
+                    print(f"Fetching {lg} {s} from web...")
+                    df = _download_historic_csv(s, lg)
+                else:
+                    print(f"Loading {lg} {s} from local file...")
+
                 df = _standardize_columns(df)
                 df = df.dropna(subset=["HomeTeam","AwayTeam","Date"])
                 if len(df) > 0:  # Only add if we got data

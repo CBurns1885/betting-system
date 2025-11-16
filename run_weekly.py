@@ -29,6 +29,10 @@ os.environ["EMAIL_SENDER"] = "christopher_burns@live.co.uk"
 os.environ["EMAIL_PASSWORD"] = ""
 os.environ["EMAIL_RECIPIENT"] = "christopher_burns@live.co.uk"
 
+# API Integration Settings
+os.environ["USE_API_FOOTBALL"] = "0"  # Set to "1" to use API-Football instead of CSV downloads
+# Set API_FOOTBALL_KEY environment variable when ready to use API mode
+
 TRAINING_START_YEAR = 2021  # Start year for historical training data (2021-2025 = 5 years)
 
 # ============================================================================
@@ -282,7 +286,25 @@ try:
         # Download with better error handling per league
         years = list(range(TRAINING_START_YEAR, dt.datetime.now().year + 1))
         print(f"   Years: {min(years)}-{max(years)} ({len(years)} seasons)")
-        download(leagues_to_download, years)
+
+        # Check if API mode is enabled
+        use_api_mode = os.environ.get("USE_API_FOOTBALL", "0") == "1"
+        api_key = os.environ.get("API_FOOTBALL_KEY", "")
+
+        if use_api_mode and api_key and api_key != "YOUR_API_KEY_HERE":
+            print("\n📡 API MODE ENABLED: Using API-Football for data download")
+            try:
+                from api_data_adapter import download_with_fallback
+                download_with_fallback(leagues_to_download, years, use_api=True, api_key=api_key)
+            except ImportError:
+                print("⚠️ API adapter not found, falling back to CSV downloads")
+                download(leagues_to_download, years)
+        else:
+            if use_api_mode:
+                print("⚠️ API mode requested but no API key found")
+                print("   Set API_FOOTBALL_KEY environment variable")
+                print("   Falling back to CSV downloads")
+            download(leagues_to_download, years)
     
     run_step(1, "DOWNLOAD HISTORICAL DATA", step1)
 
