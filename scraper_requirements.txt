@@ -1,0 +1,19 @@
+# Ultramarathon Scraper Requirements
+
+# Web scraping
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
+# Data handling
+pandas>=2.0.0
+
+# Alternative scraping tools (optional but recommended)
+selenium>=4.15.0
+playwright>=1.40.0
+
+# Rate limiting
+ratelimit>=2.2.1
+
+# HTML parsing improvements
+html5lib>=1.1
