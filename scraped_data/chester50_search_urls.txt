@@ -1,0 +1,24 @@
+Chester 50 Search URLs
+============================================================
+
+
+GOOGLE:
+  https://www.google.com/search?q=Chester+50+ultramarathon+GB+Ultras
+  https://www.google.com/search?q=Chester+50+race+report
+  https://www.google.com/search?q=Chester+50+training+plan
+  https://www.google.com/search?q=Chester+50+course+profile
+  https://www.google.com/search?q=Chester+50+ultramarathon+review
+  https://www.google.com/search?q=GB+Ultras+Chester+50+elevation
+  https://www.google.com/search?q=Chester+50+ultra+pacing+strategy
+
+YOUTUBE:
+  https://www.youtube.com/results?search_query=Chester+50+ultramarathon+GB+Ultras
+  https://www.youtube.com/results?search_query=Chester+50+race+report
+  https://www.youtube.com/results?search_query=Chester+50+training+plan
+  https://www.youtube.com/results?search_query=Chester+50+course+profile
+  https://www.youtube.com/results?search_query=Chester+50+ultramarathon+review
+  https://www.youtube.com/results?search_query=GB+Ultras+Chester+50+elevation
+  https://www.youtube.com/results?search_query=Chester+50+ultra+pacing+strategy
+
+STRAVA:
+  https://www.strava.com/search#?text=Chester%2050

@@ -1,0 +1,30 @@
+{
+  "event_name": "Chester 50 Ultramarathon",
+  "organizer": "GB Ultras",
+  "scraped_at": "2025-11-16T20:26:41.382930",
+  "pages": [],
+  "race_details": {
+    "race_name": "Chester 50",
+    "organizer": "GB Ultras",
+    "distance": "50 miles (80.5 km)",
+    "location": "Chester, England",
+    "terrain": "Canal towpath",
+    "elevation": "Minimal - flat course",
+    "typical_date": "Usually held in Spring (April/May)",
+    "course_type": "Out and back along canal",
+    "cutoff_time": "Typically 12-13 hours",
+    "aid_stations": "Multiple throughout the course",
+    "website": "https://www.gbultras.com/chester50",
+    "notes": [
+      "Flat, fast course suitable for first-time ultrarunners",
+      "Run along the Shropshire Union Canal",
+      "Good for targeting a PB due to flat terrain",
+      "Can be used as training for longer ultras"
+    ],
+    "similar_races": [
+      "Grand Union Canal Race (GB Ultras)",
+      "Thames Path 100 (Centurion Running)",
+      "South Downs Way 50 (Centurion Running)"
+    ]
+  }
+}
