@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# Data directories
+data/raw/*
+data/interim/*
+data/processed/*
+!data/.gitkeep
+
+# Model artifacts
+models/*.pkl
+models/*.joblib
+models/*.json
+
+# Outputs
+outputs/*/
+*.db
+
+# Jupyter
+.ipynb_checkpoints
+*.ipynb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Fixtures (will be downloaded)
+upcoming_fixtures.csv
+upcoming_fixtures.xlsx
+
+# Logs
+*.log
