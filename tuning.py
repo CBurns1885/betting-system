@@ -13,10 +13,17 @@ from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
 warnings.filterwarnings("ignore")
 
 # Read maximum accuracy settings from environment
-MAX_DEPTH = int(os.environ.get("MAX_DEPTH", "15"))
-MIN_SAMPLES_SPLIT = int(os.environ.get("MIN_SAMPLES_SPLIT", "2"))
-N_ESTIMATORS_MAX = int(os.environ.get("N_ESTIMATORS", "500"))
-LEARNING_RATE_MIN = float(os.environ.get("LEARNING_RATE", "0.01"))
+MAX_DEPTH = int(os.environ.get("MAX_DEPTH", "12"))
+MIN_SAMPLES_SPLIT = int(os.environ.get("MIN_SAMPLES_SPLIT", "5"))
+N_ESTIMATORS_MAX = int(os.environ.get("N_ESTIMATORS", "400"))
+LEARNING_RATE_MIN = float(os.environ.get("LEARNING_RATE", "0.02"))
+
+# Import smart tuning configuration
+try:
+    from smart_tuning_config import get_market_tuning_config
+    _HAS_SMART_TUNING = True
+except ImportError:
+    _HAS_SMART_TUNING = False
 
 # Optional imports
 try:
@@ -80,10 +87,29 @@ def expected_calibration_error(y_true_int: np.ndarray, P: np.ndarray, n_bins: in
         eces.append(ece)
     return float(max(eces))
 
-def objective_factory(alg: str, cvd: CVData):
-    """Factory for Optuna objectives with class consistency fixes"""
+def objective_factory(alg: str, cvd: CVData, market_name: str = None):
+    """
+    Factory for Optuna objectives with class consistency fixes and smart tuning
+
+    Args:
+        alg: Algorithm name ("rf", "et", "xgb", "lgb", "cat", "lr")
+        cvd: Cross-validation data
+        market_name: Market identifier for smart tuning (e.g., "y_1X2", "y_BTTS")
+    """
     X, y, ps, classes_, le = cvd.X, cvd.y, cvd.ps, cvd.classes_, cvd.label_encoder
     K = len(classes_)
+
+    # Get smart tuning configuration if available
+    if _HAS_SMART_TUNING and market_name:
+        tuning_config = get_market_tuning_config(market_name, K)
+        n_est_min, n_est_max = tuning_config["n_estimators_range"]
+        depth_min, depth_max = tuning_config["max_depth_range"]
+        print(f"   🎯 Smart tuning for {market_name}: {tuning_config['n_trials']} trials, "
+              f"estimators {n_est_min}-{n_est_max}, depth {depth_min}-{depth_max}")
+    else:
+        # Fallback to environment variables
+        n_est_min, n_est_max = 200, N_ESTIMATORS_MAX
+        depth_min, depth_max = 6, MAX_DEPTH
     
     if not _HAS_OPTUNA:
         # Return simple default models without tuning
@@ -102,8 +128,8 @@ def objective_factory(alg: str, cvd: CVData):
     def build_model(trial: optuna.Trial):
         if alg == "rf":
             return RandomForestClassifier(
-                n_estimators=trial.suggest_int("n_estimators", 300, N_ESTIMATORS_MAX),
-                max_depth=trial.suggest_int("max_depth", 8, MAX_DEPTH),
+                n_estimators=trial.suggest_int("n_estimators", n_est_min, n_est_max),
+                max_depth=trial.suggest_int("max_depth", depth_min, depth_max),
                 min_samples_split=trial.suggest_int("min_samples_split", MIN_SAMPLES_SPLIT, 10),
                 min_samples_leaf=trial.suggest_int("min_samples_leaf", 1, 5),
                 max_features=trial.suggest_categorical("max_features", ["sqrt","log2", None]),
@@ -112,8 +138,8 @@ def objective_factory(alg: str, cvd: CVData):
             )
         elif alg == "et":
             return ExtraTreesClassifier(
-                n_estimators=trial.suggest_int("n_estimators", 300, N_ESTIMATORS_MAX),
-                max_depth=trial.suggest_int("max_depth", 8, MAX_DEPTH),
+                n_estimators=trial.suggest_int("n_estimators", n_est_min, n_est_max),
+                max_depth=trial.suggest_int("max_depth", depth_min, depth_max),
                 min_samples_split=trial.suggest_int("min_samples_split", MIN_SAMPLES_SPLIT, 10),
                 min_samples_leaf=trial.suggest_int("min_samples_leaf", 1, 5),
                 max_features=trial.suggest_categorical("max_features", ["sqrt","log2", None]),
@@ -128,8 +154,8 @@ def objective_factory(alg: str, cvd: CVData):
             )
         elif alg == "xgb" and _HAS_XGB:
             return xgb.XGBClassifier(
-                n_estimators=trial.suggest_int("n_estimators", 300, N_ESTIMATORS_MAX),
-                max_depth=trial.suggest_int("max_depth", 5, min(MAX_DEPTH, 12)),  # XGBoost works best with shallower trees
+                n_estimators=trial.suggest_int("n_estimators", n_est_min, n_est_max),
+                max_depth=trial.suggest_int("max_depth", max(3, depth_min-2), min(depth_max, 10)),  # XGBoost works best with shallower trees
                 learning_rate=trial.suggest_float("learning_rate", LEARNING_RATE_MIN, 0.2, log=True),
                 subsample=trial.suggest_float("subsample", 0.7, 1.0),
                 colsample_bytree=trial.suggest_float("colsample_bytree", 0.7, 1.0),
@@ -142,9 +168,12 @@ def objective_factory(alg: str, cvd: CVData):
                 use_label_encoder=False
             )
         elif alg == "lgb" and _HAS_LGB:
+            # Calculate num_leaves from depth (2^depth - 1)
+            max_leaves = min(2**depth_max - 1, 255)
+            min_leaves = max(2**max(depth_min-1, 3) - 1, 31)
             return lgb.LGBMClassifier(
-                n_estimators=trial.suggest_int("n_estimators", 300, N_ESTIMATORS_MAX),
-                num_leaves=trial.suggest_int("num_leaves", 31, 256),  # More leaves for better accuracy
+                n_estimators=trial.suggest_int("n_estimators", n_est_min, n_est_max),
+                num_leaves=trial.suggest_int("num_leaves", min_leaves, max_leaves),
                 learning_rate=trial.suggest_float("learning_rate", LEARNING_RATE_MIN, 0.2, log=True),
                 subsample=trial.suggest_float("subsample", 0.7, 1.0),
                 colsample_bytree=trial.suggest_float("colsample_bytree", 0.7, 1.0),
@@ -154,8 +183,8 @@ def objective_factory(alg: str, cvd: CVData):
             )
         elif alg == "cat" and _HAS_CAT:
             return CatBoostClassifier(
-                iterations=trial.suggest_int("iterations", 300, N_ESTIMATORS_MAX),
-                depth=trial.suggest_int("depth", 6, min(MAX_DEPTH, 10)),  # CatBoost handles deeper trees better
+                iterations=trial.suggest_int("iterations", n_est_min, n_est_max),
+                depth=trial.suggest_int("depth", depth_min, min(depth_max, 10)),  # CatBoost handles deeper trees better
                 learning_rate=trial.suggest_float("learning_rate", LEARNING_RATE_MIN, 0.2, log=True),
                 l2_leaf_reg=trial.suggest_float("l2_leaf_reg", 1.0, 10.0),
                 random_state=42,

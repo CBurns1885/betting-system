@@ -15,14 +15,23 @@ from config import OUTPUT_DIR
 # ============================================================================
 
 os.environ["DISABLE_XGB"] = "0"  # Enable XGBoost for better accuracy (set to "1" to disable)
-os.environ["OPTUNA_TRIALS"] = "50"  # MAXIMUM ACCURACY: Increased to 50 trials for better tuning (was 25)
-os.environ["N_ESTIMATORS"] = "500"  # MAXIMUM ACCURACY: Increased to 500 estimators (was 300)
+
+# SMART MARKET-SPECIFIC TUNING (Optimized per market complexity)
+os.environ["USE_MARKET_SPECIFIC_TRIALS"] = "1"  # Enable intelligent trial allocation
+# Binary markets (1X2, BTTS, O/U): 15 trials (simpler, 2-3 classes)
+# Multiclass markets (Correct Score, Both Halves): 30 trials (complex, 10+ classes)
+# Ordinal markets (Asian Handicap): 20 trials (medium complexity, ordered outcomes)
+os.environ["OPTUNA_TRIALS_BINARY"] = "15"      # Binary/ternary markets
+os.environ["OPTUNA_TRIALS_MULTICLASS"] = "30"  # Complex multiclass markets
+os.environ["OPTUNA_TRIALS_ORDINAL"] = "20"     # Ordinal markets
+os.environ["OPTUNA_TRIALS_FALLBACK"] = "15"    # Fallback for unknown markets
+
+os.environ["N_ESTIMATORS"] = "400"  # MAXIMUM ACCURACY: Balanced performance (was 300, reduced from 500)
 os.environ["USE_SPECIALIZED"] = "0"  # Disable specialized models to enable full Optuna tuning
-os.environ["USE_MARKET_SPECIFIC_TRIALS"] = "1"  # Enable market-specific trial optimization (binary: 20-50, multiclass: 30-60, ordinal: 20-50)
 os.environ["FORCE_RETRAIN"] = "0"  # Set to "1" to force retraining (set to "0" for incremental training)
-os.environ["MAX_DEPTH"] = "15"  # MAXIMUM ACCURACY: Deeper trees for better pattern recognition
-os.environ["MIN_SAMPLES_SPLIT"] = "2"  # MAXIMUM ACCURACY: Allow finer splits
-os.environ["LEARNING_RATE"] = "0.01"  # MAXIMUM ACCURACY: Lower learning rate for better convergence
+os.environ["MAX_DEPTH"] = "12"  # MAXIMUM ACCURACY: Optimized depth (was 15, too deep causes overfitting)
+os.environ["MIN_SAMPLES_SPLIT"] = "5"  # MAXIMUM ACCURACY: Prevent overfitting (was 2, too aggressive)
+os.environ["LEARNING_RATE"] = "0.02"  # MAXIMUM ACCURACY: Balanced learning rate (was 0.01, slightly faster)
 os.environ["EMAIL_SMTP_SERVER"] = "smtp-mail.outlook.com"
 os.environ["EMAIL_SMTP_PORT"] = "587"
 os.environ["EMAIL_SENDER"] = "christopher_burns@live.co.uk"
