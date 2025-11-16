@@ -313,9 +313,9 @@ class AccuracyTracker:
     def export_accuracy_report(self, output_path: Path = Path("outputs/accuracy_report.csv")):
         """Export detailed accuracy report"""
         conn = sqlite3.connect(self.db_path)
-        
+
         df = pd.read_sql_query("""
-            SELECT 
+            SELECT
                 week_id,
                 league,
                 market,
@@ -327,12 +327,144 @@ class AccuracyTracker:
             FROM weekly_accuracy
             ORDER BY week_id DESC, accuracy DESC
         """, conn)
-        
+
         conn.close()
-        
+
         df.to_csv(output_path, index=False)
         print(f"✅ Exported accuracy report: {output_path}")
         return df
+
+    def update_with_results(self, results_df: pd.DataFrame) -> int:
+        """
+        Update predictions with actual results
+
+        Args:
+            results_df: DataFrame with actual match outcomes
+
+        Returns:
+            Number of predictions updated
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        updated_count = 0
+
+        for idx, row in results_df.iterrows():
+            try:
+                match_date = pd.to_datetime(row['Date']).date()
+                league = row.get('League', row.get('Div', ''))
+                home_team = row.get('HomeTeam', '')
+                away_team = row.get('AwayTeam', '')
+
+                # Find actual outcomes for each market
+                outcome_cols = [c for c in results_df.columns if c.startswith('y_')]
+
+                for outcome_col in outcome_cols:
+                    market = outcome_col  # e.g., y_1X2
+                    actual_outcome = row[outcome_col]
+
+                    if pd.notna(actual_outcome):
+                        # Update matching predictions
+                        cursor.execute("""
+                            UPDATE predictions
+                            SET actual_outcome = ?,
+                                correct = CASE
+                                    WHEN predicted_outcome = ? THEN 1
+                                    ELSE 0
+                                END
+                            WHERE match_date = ?
+                            AND league = ?
+                            AND home_team = ?
+                            AND away_team = ?
+                            AND market = ?
+                            AND actual_outcome IS NULL
+                        """, (actual_outcome, actual_outcome, match_date, league,
+                             home_team, away_team, market))
+
+                        updated_count += cursor.rowcount
+            except Exception as e:
+                print(f"⚠️ Error updating row {idx}: {e}")
+                continue
+
+        conn.commit()
+
+        # Calculate accuracy for affected weeks
+        if updated_count > 0:
+            weeks = results_df['Date'].apply(lambda x: pd.to_datetime(x).strftime('%Y-W%W')).unique()
+            for week in weeks:
+                self.calculate_weekly_accuracy(week)
+
+            # Update market weights
+            self.get_market_weights()
+
+        conn.close()
+
+        return updated_count
+
+    def get_accuracy_summary(self) -> Dict[str, float]:
+        """Get current accuracy summary by market"""
+        conn = sqlite3.connect(self.db_path)
+
+        query = """
+            SELECT
+                market,
+                SUM(correct_predictions) * 1.0 / SUM(total_predictions) as accuracy
+            FROM weekly_accuracy
+            GROUP BY market
+            HAVING SUM(total_predictions) >= 10
+            ORDER BY accuracy DESC
+        """
+
+        df = pd.read_sql_query(query, conn)
+        conn.close()
+
+        if df.empty:
+            return {}
+
+        return dict(zip(df['market'], df['accuracy']))
+
+    def get_market_reliability(self) -> Dict[str, Dict]:
+        """
+        Get market reliability statistics for filtering
+
+        Returns:
+            Dictionary of market -> {accuracy, total_predictions, reliability_score}
+        """
+        conn = sqlite3.connect(self.db_path)
+
+        query = """
+            SELECT
+                market,
+                SUM(total_predictions) as total_preds,
+                SUM(correct_predictions) as correct_preds,
+                SUM(correct_predictions) * 1.0 / SUM(total_predictions) as accuracy,
+                AVG(brier_score) as avg_brier
+            FROM weekly_accuracy
+            GROUP BY market
+            HAVING total_preds >= 5
+            ORDER BY accuracy DESC
+        """
+
+        df = pd.read_sql_query(query, conn)
+        conn.close()
+
+        if df.empty:
+            return {}
+
+        # Calculate reliability score (accuracy adjusted by sample size)
+        df['reliability_score'] = df['accuracy'] * (1 - 1/(df['total_preds'] + 1))
+
+        result = {}
+        for _, row in df.iterrows():
+            result[row['market']] = {
+                'accuracy': row['accuracy'],
+                'total_predictions': int(row['total_preds']),
+                'correct_predictions': int(row['correct_preds']),
+                'avg_brier_score': row['avg_brier'] if pd.notna(row['avg_brier']) else 0,
+                'reliability_score': row['reliability_score']
+            }
+
+        return result
 
 
 # ============================================================================

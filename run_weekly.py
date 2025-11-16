@@ -15,11 +15,14 @@ from config import OUTPUT_DIR
 # ============================================================================
 
 os.environ["DISABLE_XGB"] = "0"  # Enable XGBoost for better accuracy (set to "1" to disable)
-os.environ["OPTUNA_TRIALS"] = "25"  # Fallback if market-specific trials disabled (default: 25)
-os.environ["N_ESTIMATORS"] = "300"  # Optimized: 300 estimators provides strong performance with faster training
+os.environ["OPTUNA_TRIALS"] = "50"  # MAXIMUM ACCURACY: Increased to 50 trials for better tuning (was 25)
+os.environ["N_ESTIMATORS"] = "500"  # MAXIMUM ACCURACY: Increased to 500 estimators (was 300)
 os.environ["USE_SPECIALIZED"] = "0"  # Disable specialized models to enable full Optuna tuning
-os.environ["USE_MARKET_SPECIFIC_TRIALS"] = "1"  # Enable market-specific trial optimization (binary: 5-20, multiclass: 10-30, ordinal: 5-20)
+os.environ["USE_MARKET_SPECIFIC_TRIALS"] = "1"  # Enable market-specific trial optimization (binary: 20-50, multiclass: 30-60, ordinal: 20-50)
 os.environ["FORCE_RETRAIN"] = "0"  # Set to "1" to force retraining (set to "0" for incremental training)
+os.environ["MAX_DEPTH"] = "15"  # MAXIMUM ACCURACY: Deeper trees for better pattern recognition
+os.environ["MIN_SAMPLES_SPLIT"] = "2"  # MAXIMUM ACCURACY: Allow finer splits
+os.environ["LEARNING_RATE"] = "0.01"  # MAXIMUM ACCURACY: Lower learning rate for better convergence
 os.environ["EMAIL_SMTP_SERVER"] = "smtp-mail.outlook.com"
 os.environ["EMAIL_SMTP_PORT"] = "587"
 os.environ["EMAIL_SENDER"] = "christopher_burns@live.co.uk"
@@ -156,7 +159,7 @@ print(f"   Incremental training: ENABLED (reuses models when possible)")
 # RUN PIPELINE WITH ERROR RECOVERY
 # ============================================================================
 
-TOTAL_STEPS = 18
+TOTAL_STEPS = 20  # Increased from 18 to include accuracy update steps
 errors = []
 
 def run_step(step_num, step_name, func, *args, **kwargs):
@@ -165,7 +168,7 @@ def run_step(step_num, step_name, func, *args, **kwargs):
     print(f"\n{'='*60}")
     print(f"STEP {step_num}/{TOTAL_STEPS} ({percentage}%): {step_name}")
     print('='*60)
-    
+
     try:
         result = func(*args, **kwargs)
         print(f"✅ Step {step_num} complete")
@@ -189,6 +192,45 @@ try:
 
     # Store detected leagues for use across steps (using dict to avoid nonlocal issues)
     league_context = {'detected_leagues': None}
+
+    # Step 0.5: Update accuracy database with last week's results
+    def step0_5():
+        """Update accuracy tracker with results from completed matches"""
+        try:
+            from accuracy_tracker import AccuracyTracker
+            from update_results import fetch_latest_results, prepare_results_for_update
+
+            print("📊 Checking for completed matches to update accuracy...")
+
+            # Fetch latest results
+            results_df = fetch_latest_results()
+
+            if results_df is not None and len(results_df) > 0:
+                # Prepare results for update
+                results_df = prepare_results_for_update(results_df)
+
+                # Update accuracy tracker
+                tracker = AccuracyTracker()
+                updated_count = tracker.update_with_results(results_df)
+
+                if updated_count > 0:
+                    print(f"✅ Updated accuracy for {updated_count} matches")
+
+                    # Generate accuracy report
+                    accuracy_report = tracker.get_accuracy_summary()
+                    print("\n📈 Current Accuracy Summary:")
+                    for market, acc in accuracy_report.items():
+                        print(f"   {market}: {acc:.1%}")
+                else:
+                    print("ℹ️ No new results to update")
+            else:
+                print("ℹ️ No recent match results found")
+
+        except Exception as e:
+            print(f"⚠️ Accuracy update skipped: {e}")
+            print("   (Continuing without accuracy update)")
+
+    run_step(0, "UPDATE ACCURACY FROM LAST WEEK", step0_5)
 
     # Step 1: Download historical data
     def step1():
@@ -338,13 +380,76 @@ try:
     # Step 8: Generate predictions
     def step8():
         predict_week(fixtures_csv_path)
-    
+
     run_step(8, "GENERATE PREDICTIONS", step8)
-    
+
+    # Step 8.5: Filter predictions by market reliability
+    def step8_5():
+        """Filter out markets with low historical accuracy"""
+        try:
+            from accuracy_tracker import AccuracyTracker
+            import pandas as pd
+
+            csv_path = OUTPUT_DIR / "weekly_bets_full.csv"
+
+            if not csv_path.exists():
+                print("⚠️ No predictions file found, skipping reliability filter")
+                return
+
+            print("🔍 Filtering predictions by market reliability...")
+
+            # Load predictions
+            df = pd.read_csv(csv_path)
+
+            # Get market accuracy from tracker
+            tracker = AccuracyTracker()
+            market_reliability = tracker.get_market_reliability()
+
+            # Define minimum accuracy threshold
+            MIN_ACCURACY = 0.55  # 55% minimum accuracy to keep a market
+            MIN_SAMPLES = 20     # Minimum 20 predictions to have reliable stats
+
+            # Filter out unreliable markets
+            reliable_markets = []
+            unreliable_markets = []
+
+            for market, stats in market_reliability.items():
+                accuracy = stats.get('accuracy', 0)
+                total = stats.get('total_predictions', 0)
+
+                if total >= MIN_SAMPLES and accuracy >= MIN_ACCURACY:
+                    reliable_markets.append(market)
+                elif total >= MIN_SAMPLES:
+                    unreliable_markets.append((market, accuracy, total))
+
+            if unreliable_markets:
+                print(f"\n⚠️ Filtering out {len(unreliable_markets)} unreliable markets:")
+                for market, acc, total in unreliable_markets:
+                    print(f"   {market}: {acc:.1%} accuracy ({total} predictions)")
+
+                # Remove predictions for unreliable markets
+                # This is done by filtering columns
+                cols_to_keep = [col for col in df.columns
+                               if not any(unreliable_market in col
+                                        for unreliable_market, _, _ in unreliable_markets)]
+
+                df_filtered = df[cols_to_keep]
+                df_filtered.to_csv(csv_path, index=False)
+
+                print(f"✅ Kept {len(reliable_markets)} reliable markets")
+            else:
+                print("✅ All markets meet reliability threshold")
+
+        except Exception as e:
+            print(f"⚠️ Market filtering skipped: {e}")
+            print("   (Continuing with all markets)")
+
+    run_step(8.5, "FILTER BY MARKET RELIABILITY", step8_5)
+
     # ========================================================================
     # ENHANCEMENT STEPS
     # ========================================================================
-    
+
     # Step 9: Optimize BTTS/O/U Predictions
     def step9():
         try:

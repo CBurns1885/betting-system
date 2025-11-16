@@ -1,7 +1,8 @@
-# tuning.py - FIXED VERSION with class consistency
+# tuning.py - FIXED VERSION with class consistency and maximum accuracy support
 from __future__ import annotations
 import numpy as np
 import warnings
+import os
 from typing import Dict, List, Tuple
 from dataclasses import dataclass
 from sklearn.model_selection import PredefinedSplit
@@ -10,6 +11,12 @@ from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
 warnings.filterwarnings("ignore")
+
+# Read maximum accuracy settings from environment
+MAX_DEPTH = int(os.environ.get("MAX_DEPTH", "15"))
+MIN_SAMPLES_SPLIT = int(os.environ.get("MIN_SAMPLES_SPLIT", "2"))
+N_ESTIMATORS_MAX = int(os.environ.get("N_ESTIMATORS", "500"))
+LEARNING_RATE_MIN = float(os.environ.get("LEARNING_RATE", "0.01"))
 
 # Optional imports
 try:
@@ -95,9 +102,9 @@ def objective_factory(alg: str, cvd: CVData):
     def build_model(trial: optuna.Trial):
         if alg == "rf":
             return RandomForestClassifier(
-                n_estimators=trial.suggest_int("n_estimators", 200, 800),
-                max_depth=trial.suggest_int("max_depth", 6, 20),
-                min_samples_split=trial.suggest_int("min_samples_split", 2, 10),
+                n_estimators=trial.suggest_int("n_estimators", 300, N_ESTIMATORS_MAX),
+                max_depth=trial.suggest_int("max_depth", 8, MAX_DEPTH),
+                min_samples_split=trial.suggest_int("min_samples_split", MIN_SAMPLES_SPLIT, 10),
                 min_samples_leaf=trial.suggest_int("min_samples_leaf", 1, 5),
                 max_features=trial.suggest_categorical("max_features", ["sqrt","log2", None]),
                 class_weight="balanced_subsample",
@@ -105,9 +112,9 @@ def objective_factory(alg: str, cvd: CVData):
             )
         elif alg == "et":
             return ExtraTreesClassifier(
-                n_estimators=trial.suggest_int("n_estimators", 200, 800),
-                max_depth=trial.suggest_int("max_depth", 6, 20),
-                min_samples_split=trial.suggest_int("min_samples_split", 2, 10),
+                n_estimators=trial.suggest_int("n_estimators", 300, N_ESTIMATORS_MAX),
+                max_depth=trial.suggest_int("max_depth", 8, MAX_DEPTH),
+                min_samples_split=trial.suggest_int("min_samples_split", MIN_SAMPLES_SPLIT, 10),
                 min_samples_leaf=trial.suggest_int("min_samples_leaf", 1, 5),
                 max_features=trial.suggest_categorical("max_features", ["sqrt","log2", None]),
                 class_weight="balanced",
@@ -121,11 +128,11 @@ def objective_factory(alg: str, cvd: CVData):
             )
         elif alg == "xgb" and _HAS_XGB:
             return xgb.XGBClassifier(
-                n_estimators=trial.suggest_int("n_estimators", 200, 800),
-                max_depth=trial.suggest_int("max_depth", 3, 8),
-                learning_rate=trial.suggest_float("learning_rate", 0.01, 0.2, log=True),
-                subsample=trial.suggest_float("subsample", 0.6, 1.0),
-                colsample_bytree=trial.suggest_float("colsample_bytree", 0.6, 1.0),
+                n_estimators=trial.suggest_int("n_estimators", 300, N_ESTIMATORS_MAX),
+                max_depth=trial.suggest_int("max_depth", 5, min(MAX_DEPTH, 12)),  # XGBoost works best with shallower trees
+                learning_rate=trial.suggest_float("learning_rate", LEARNING_RATE_MIN, 0.2, log=True),
+                subsample=trial.suggest_float("subsample", 0.7, 1.0),
+                colsample_bytree=trial.suggest_float("colsample_bytree", 0.7, 1.0),
                 reg_alpha=trial.suggest_float("reg_alpha", 1e-6, 1.0, log=True),
                 reg_lambda=trial.suggest_float("reg_lambda", 1e-6, 1.0, log=True),
                 objective="multi:softprob" if K>2 else "binary:logistic",
@@ -136,22 +143,22 @@ def objective_factory(alg: str, cvd: CVData):
             )
         elif alg == "lgb" and _HAS_LGB:
             return lgb.LGBMClassifier(
-                n_estimators=trial.suggest_int("n_estimators", 200, 1000),
-                num_leaves=trial.suggest_int("num_leaves", 16, 128),
-                learning_rate=trial.suggest_float("learning_rate", 0.01, 0.2, log=True),
-                subsample=trial.suggest_float("subsample", 0.6, 1.0),
-                colsample_bytree=trial.suggest_float("colsample_bytree", 0.6, 1.0),
-                min_child_samples=trial.suggest_int("min_child_samples", 10, 50),
+                n_estimators=trial.suggest_int("n_estimators", 300, N_ESTIMATORS_MAX),
+                num_leaves=trial.suggest_int("num_leaves", 31, 256),  # More leaves for better accuracy
+                learning_rate=trial.suggest_float("learning_rate", LEARNING_RATE_MIN, 0.2, log=True),
+                subsample=trial.suggest_float("subsample", 0.7, 1.0),
+                colsample_bytree=trial.suggest_float("colsample_bytree", 0.7, 1.0),
+                min_child_samples=trial.suggest_int("min_child_samples", 5, 50),
                 objective="multiclass" if K>2 else "binary",
                 random_state=42, n_jobs=-1
             )
         elif alg == "cat" and _HAS_CAT:
             return CatBoostClassifier(
-                iterations=trial.suggest_int("iterations", 200, 1000),
-                depth=trial.suggest_int("depth", 4, 8),
-                learning_rate=trial.suggest_float("learning_rate", 0.01, 0.2, log=True),
+                iterations=trial.suggest_int("iterations", 300, N_ESTIMATORS_MAX),
+                depth=trial.suggest_int("depth", 6, min(MAX_DEPTH, 10)),  # CatBoost handles deeper trees better
+                learning_rate=trial.suggest_float("learning_rate", LEARNING_RATE_MIN, 0.2, log=True),
                 l2_leaf_reg=trial.suggest_float("l2_leaf_reg", 1.0, 10.0),
-                random_state=42, 
+                random_state=42,
                 loss_function="MultiClass" if K>2 else "Logloss",
                 verbose=False
             )
