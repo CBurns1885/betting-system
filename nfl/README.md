@@ -352,6 +352,37 @@ python run_weekly.py
 
 ---
 
+## 🔬 BACKTESTING
+
+Test your strategies on historical data before risking real money:
+
+### Quick Start:
+```bash
+# Interactive backtest (choose preset)
+python backtest_config.py
+
+# Backtest last season
+python backtest.py --start 2023 --end 2023
+
+# Realistic backtest with bankroll management
+python realistic_backtest.py --bankroll 1000 --kelly 0.25
+```
+
+### Features:
+- **Walk-forward validation** - No data leakage, trains only on past data
+- **Multiple presets** - Last season, last 2 seasons, custom periods
+- **Market analysis** - Accuracy and ROI by market (Moneyline, Spread, Totals)
+- **Realistic constraints** - Includes vig (-110), Kelly criterion, bankroll management
+- **Visualization** - HTML reports, accuracy charts, ROI plots
+- **Bet logging** - Detailed log of every simulated bet
+
+### Output Files:
+- `backtest_summary.csv` - Performance by market
+- `backtest_predictions.csv` - All predictions vs actuals
+- `backtest_report.html` - Visual report with charts
+- `backtest_bet_log.csv` - Detailed bet-by-bet results (realistic mode)
+- `backtest_bankroll_history.csv` - Bankroll over time (realistic mode)
+
 ## 📚 ADDITIONAL FEATURES TO ADD
 
 Future enhancements (not yet implemented):
@@ -361,9 +392,6 @@ Future enhancements (not yet implemented):
 - **Weather Integration** - Impact of weather on totals
 - **Injury Reports** - Adjust for key player absences
 - **Referee Stats** - Some refs favor certain styles
-- **Parlay Builder** - Correlated parlay finder
-- **Accuracy Tracking** - Track and improve predictions
-- **Backtesting** - Test strategies on historical data
 
 ---
 
