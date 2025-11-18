@@ -181,16 +181,24 @@ class TennisFeatureEngineer:
                 # Calculate features based on current state
                 features = self.calculate_match_features(match, df[:idx] if idx > 0 else None)
 
-                # Add match identifiers
-                features['match_id'] = idx
-                features['date'] = match.get('tourney_date', match.get('date', ''))
-                features['player1'] = match.get('winner_name', match.get('player1_name', ''))
-                features['player2'] = match.get('loser_name', match.get('player2_name', ''))
+                # Determine player IDs/names
+                if 'winner_name' in match and 'loser_name' in match:
+                    # Historical data format: winner and loser are known
+                    # Randomly assign who is player1 vs player2 to avoid bias
+                    import random
+                    if random.random() < 0.5:
+                        player1 = match.get('winner_id', match.get('winner_name', ''))
+                        player2 = match.get('loser_id', match.get('loser_name', ''))
+                        target = 1  # Player 1 (winner) won
+                    else:
+                        player1 = match.get('loser_id', match.get('loser_name', ''))
+                        player2 = match.get('winner_id', match.get('winner_name', ''))
+                        target = 0  # Player 1 (loser) lost
 
-                # Add target variable (if available)
-                if 'winner_name' in match:
-                    # In historical data, player1 is winner
-                    features['target'] = 1  # Player 1 won
+                    features['player1'] = player1
+                    features['player2'] = player2
+                    features['target'] = target
+
                     winner = match.get('winner_id', match.get('winner_name', ''))
                     loser = match.get('loser_id', match.get('loser_name', ''))
                     surface = match.get('surface', 'Hard')
@@ -198,6 +206,14 @@ class TennisFeatureEngineer:
                     # Update ELO and H2H after match
                     self.update_elo(winner, loser, surface)
                     self.update_h2h(winner, loser, winner)
+                else:
+                    # Prediction format: player1 and player2 provided
+                    features['player1'] = match.get('player1_id', match.get('player1_name', ''))
+                    features['player2'] = match.get('player2_id', match.get('player2_name', ''))
+
+                # Add match identifiers
+                features['match_id'] = idx
+                features['date'] = match.get('tourney_date', match.get('date', ''))
 
                 feature_rows.append(features)
 
