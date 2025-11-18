@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+data/raw/*
+data/interim/*
+data/processed/*
+models/*.pkl
+outputs/*/
+*.db
+.ipynb_checkpoints
+*.log
+upcoming_fixtures.csv
+upcoming_fixtures.xlsx
